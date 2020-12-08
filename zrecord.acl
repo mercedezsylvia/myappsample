@@ -1,0 +1,549 @@
+#!/usr/bin/perl
+
+#open standards manager
+################################################
+#	opens the picklist to build datafile
+#################################################
+function load_StandardsManager(){
+	#CREATE WINDOW
+	$doc = doc_open('P:\Public\Assets\ArbortextCatalogs\Standards\xui_standardsManager.xml', 1)
+	$xui_standardsManager = window_create("xui",0x00800, $doc);
+	window_show($xui_standardsManager, 1);
+	
+	#turn on Show Compliance Tag. 
+	# -------TO DO : check if already turned ON. 
+	#techcomply_selectComplianceTag::toggleComplyTag()
+	
+	#this is window name: $xui_standardsManager
+}
+
+
+
+function insertisarp() {
+	
+	#TODO-- compliance tag. 
+	#capture conformity radio. modify with selection. 
+	#dlgitem_get(window, dlgitem, attribute)
+	
+	$isarpselected=dlgitem_get_selected_appdata($xui_standardsManager, "treecontrol_isarps")
+	$conformanceSelected=dlgitem_get_value($xui_standardsManager , "conformanceRadio") 
+	# eval "isarp selected1: [ ".$isarpselected." ]" output=>*
+	# eval "coformance selected1: [ ".$conformanceSelected." ]" output=>*
+	
+	#----CONFIRM INSIDE STANDARDS TAG
+	$whattag=oid_name(oid_caret())
+	$parentTag=oid_name(oid_parent(oid_caret()))
+	if($whattag=="standards" || $parentTag=="standards") {
+		insert_string -markup "$isarpselected";
+		# eval "lookTag: [ ".$whattag." ]" output=>*
+		# eval "lookParent: [ ".$parentTag." ]" output=>* 
+	} else {
+		message_box("Isarps must be inserted within a standards tag.",0x00+0x10,"Standards Error")
+	} 
+	
+	#----get conformity and modify attr
+	switch ($conformanceSelected) {
+		case "1":
+		$modConformance="full"
+		break;
+		
+		case "2":
+		$modConformance="partial"
+		break;
+		
+		case "3":
+		$modConformance="none"
+		break;
+	}
+	oid_modify_attr(oid_caret(), "conformity", $modConformance)
+	
+}
+
+
+
+#Opens the xui browse window
+#####################################
+#	LOAD NEW EDITION OF ISARPS
+######################################
+function loadIsarps(){
+	#CREATE WINDOW
+	$doc = doc_open('P:\Public\Assets\ArbortextCatalogs\Standards\isarps\loadIsarps.xml', 1)
+	$xui_loadisarps = window_create("xui",0x040000, $doc);
+	window_show($xui_loadisarps, 1);
+}
+
+
+#this is the browse button on the xui window. opens a window browser. 
+function browseToFolderIsarps(){
+	#retrieves value written in the text field "targetValue"
+	$initPath = dlgitem_get_value($xui_loadisarps,"targetValue");
+	$folderPath = "";
+		
+	#opens a file explorer to the location from the set targetValue field. 
+	$folderPath = file_selector($initPath,"","","Select Manual");
+	
+	#once file is selected, change the slash type, and set the targetValue field to include the selected file. 
+	if($folderPath!="")
+	{
+		gsub('\\','/',$folderPath);
+		dlgitem_set_value($xui_loadisarps, "targetValue", $folderPath);
+	}	
+}
+
+#this is the okay button on the xui browse window. 
+#this copies the table control and pastes into xui_toc.xml file. 
+function browseToOkayIsarps(){
+	#find the browse path to know what file to open. 
+	#local $browseToPath = dlgitem_get_value($xui_loadisarps,"targetValue");
+	$editionnumber = dlgitem_get_value($xui_loadisarps,"editionnumber")
+	$editiondatecapture = dlgitem_get_value($xui_loadisarps,"editiondate")
+	$editiondate0 = ctime($editiondatecapture)
+	#delete the 0s
+	$datenoZero = sub('00:00:00 ','', $editiondate0, $editiondate)
+	$todaysdate=getTimeDate("3")
+	# eval "\n".$browseToPath output=>*
+	# eval "\n".$editionnumber output=>*
+	# eval "\n".$editiondate output=>*
+	
+	window_destroy($xui_loadisarps)
+		
+	$countI=0;
+	$countY=0;
+	delete($allIsarps);
+	delete($section);
+	delete($sectionnbr);
+	delete($isarpRows);
+	
+	edit -nw -xml "C:\techuser\init\isarps.xml"
+	
+	#find all the isarps
+	$howmany=oid_find_children(oid_first(), allIsarps, "para")
+	
+	#eval $howmany output=>*
+		
+	if(count($allIsarps)>0)
+	{
+		for($eachI in $allIsarps)
+		{
+			$countI++
+			$section[$countI]=substr(oid_content($allIsarps[$eachI]),4,3)
+			$sectionnbr[$countI]=substr(oid_content($allIsarps[$eachI]),8)
+			#eval "\nsection: ".$section."\tsectionbnr: ".$sectionnbr output=>*
+		}
+	}
+	file_close()
+	
+	edit -nw -xml "P:\Public\Assets\ArbortextCatalogs\Standards\xui_standardsManager.xml"
+	#update edition number information:
+	oid_find_child_attrs(oid_first(), editionnumberarr, "id", "editionnumber", 0x01)
+	for(eachnum in editionnumberarr) {
+		goto_oid(editionnumberarr[1], -2)
+		mark begin
+		goto_oid(editionnumberarr[1], -3)
+		mark end
+		delete_mark
+	}
+	$neweditionnumber = "<description fontsize=\"12\" id=\"editionnumber\">Edition ".$editionnumber."</description>"
+	insert_string -markup "$neweditionnumber"
+	
+	#update edition date information
+	oid_find_child_attrs(oid_first(), editiondatearr, "id", "editiondate", 0x01)
+	for(eachdate in editiondatearr) {
+		goto_oid(editiondatearr[1], -2)
+		mark begin
+		goto_oid(editiondatearr[1], -3)
+		mark end
+		delete_mark
+	}
+	$neweditiondate = "<description id=\"editiondate\">Edition Date: ".$editiondate."</description>"
+	insert_string -markup "$neweditiondate"
+	
+	oid_find_child_attrs(oid_first(), oid_treecontrolfind, "id", "treecontrol_isarps")
+	goto_oid(oid_treecontrolfind[1], -1)
+	
+	oid_find_child_attrs(oid_first(), orgArray, "label", "ORG", 0x01)
+	oid_find_child_attrs(oid_first(), fltArray, "label", "FLT", 0x01)
+	oid_find_child_attrs(oid_first(), dspArray, "label", "DSP", 0x01)
+	oid_find_child_attrs(oid_first(), mntArray, "label", "MNT", 0x01)
+	oid_find_child_attrs(oid_first(), cabArray, "label", "CAB", 0x01)
+	oid_find_child_attrs(oid_first(), grhArray, "label", "GRH", 0x01)
+	oid_find_child_attrs(oid_first(), cgoArray, "label", "CGO", 0x01)
+	oid_find_child_attrs(oid_first(), secArray, "label", "SEC", 0x01)
+	oid_find_child_attrs(oid_first(), appdataArray, "appdata")
+	
+	for ($eachOID in $appdataArray) {
+		oid_delete($appdataArray[$eachOID])
+	}
+	
+	for ($eachS in $section) {
+		$countS++
+		if ($section[$eachS]=="ORG") {
+			goto_oid(orgArray[1], -1)
+			$isarptree="<treenode appdata=\'<ISARP id=\"x".time().$countS."\" cat_ver=\"Ed ".$editionnumber."\" st_ver=\" Ed ".$editionnumber."\" conformity=\"\" section=\"".$section[$eachS]."\" section_nbr=\"".$sectionnbr[$eachS]."\"/>\' id=\"x".$countS."\" label=\"".$editionnumber."-".$section[$eachS]." ".$sectionnbr[$eachS]."\"></treenode>"
+			insert_string -markup "$isarptree"
+		}
+		if($section[$eachS]=="FLT") {
+			goto_oid(fltArray[1], -1)
+			$isarptree="<treenode appdata=\'<ISARP id=\"x".time().$countS."\" cat_ver=\"Ed ".$editionnumber."\" st_ver=\"Ed ".$editionnumber."\" conformity=\"\" section=\"".$section[$eachS]."\" section_nbr=\"".$sectionnbr[$eachS]."\"/>\' id=\"x".$countS."\" label=\"".$editionnumber."-".$section[$eachS]." ".$sectionnbr[$eachS]."\"></treenode>"
+			insert_string -markup "$isarptree"
+		}
+		if($section[$eachS]=="DSP") {
+			goto_oid(dspArray[1], -1)
+			$isarptree="<treenode appdata=\'<ISARP id=\"x".time().$countS."\" cat_ver=\"Ed ".$editionnumber."\" st_ver=\"Ed ".$editionnumber."\" conformity=\"\" section=\"".$section[$eachS]."\" section_nbr=\"".$sectionnbr[$eachS]."\"/>\' id=\"x".$countS."\" label=\"".$editionnumber."-".$section[$eachS]." ".$sectionnbr[$eachS]."\"></treenode>"
+			insert_string -markup "$isarptree"
+		}
+		if($section[$eachS]=="MNT") {
+			goto_oid(mntArray[1], -1)
+			$isarptree="<treenode appdata=\'<ISARP id=\"x".time().$countS."\" cat_ver=\"Ed ".$editionnumber."\" st_ver=\"Ed ".$editionnumber."\" conformity=\"\" section=\"".$section[$eachS]."\" section_nbr=\"".$sectionnbr[$eachS]."\"/>\' id=\"x".$countS."\" label=\"".$editionnumber."-".$section[$eachS]." ".$sectionnbr[$eachS]."\"></treenode>"
+			insert_string -markup "$isarptree"
+		}
+		if($section[$eachS]=="CAB") {
+			goto_oid(cabArray[1], -1)
+			$isarptree="<treenode appdata=\'<ISARP id=\"x".time().$countS."\" cat_ver=\"Ed ".$editionnumber."\" st_ver=\"Ed ".$editionnumber."\" conformity=\"\" section=\"".$section[$eachS]."\" section_nbr=\"".$sectionnbr[$eachS]."\"/>\' id=\"x".$countS."\" label=\"".$editionnumber."-".$section[$eachS]." ".$sectionnbr[$eachS]."\"></treenode>"
+			insert_string -markup "$isarptree"
+		}
+		if($section[$eachS]=="GRH") {
+			goto_oid(grhArray[1], -1)
+			$isarptree="<treenode appdata=\'<ISARP id=\"x".time().$countS."\" cat_ver=\"Ed ".$editionnumber."\" st_ver=\"Ed ".$editionnumber."\" conformity=\"\" section=\"".$section[$eachS]."\" section_nbr=\"".$sectionnbr[$eachS]."\"/>\' id=\"x".$countS."\" label=\"".$editionnumber."-".$section[$eachS]." ".$sectionnbr[$eachS]."\"></treenode>"
+			insert_string -markup "$isarptree"
+		}
+		if($section[$eachS]=="CGO") {
+			goto_oid(cgoArray[1], -1)
+			$isarptree="<treenode appdata=\'<ISARP id=\"x".time().$countS."\" cat_ver=\"Ed ".$editionnumber."\" st_ver=\"Ed ".$editionnumber."\" conformity=\"\" section=\"".$section[$eachS]."\" section_nbr=\"".$sectionnbr[$eachS]."\"/>\' id=\"x".$countS."\" label=\"".$editionnumber."-".$section[$eachS]." ".$sectionnbr[$eachS]."\"></treenode>"
+			insert_string -markup "$isarptree"
+		}
+		if($section[$eachS]=="SEC") {
+			goto_oid(secArray[1], -1)
+			$isarptree="<treenode appdata=\'<ISARP id=\"x".time().$countS."\" cat_ver=\"Ed ".$editionnumber."\" st_ver=\"Ed ".$editionnumber."\" conformity=\"\" section=\"".$section[$eachS]."\" section_nbr=\"".$sectionnbr[$eachS]."\"/>\' id=\"x".$countS."\" label=\"".$editionnumber."-".$section[$eachS]." ".$sectionnbr[$eachS]."\"></treenode>"
+			insert_string -markup "$isarptree"
+		}
+	}
+	
+	#delete buffer
+	db -all
+	#save the .xml file
+	doc_save()
+	
+	#wait/stall .25 seconds before closing. This allows toolbar3 to autoclose. otherwise, receive error.  
+	timer_add_callback(25, "timerCallback");
+	window_set(0, "message", "waiting..."); 
+	$result = event_process(1);
+	window_set(0, "message", "event_process returned $result");
+	file_close()	
+}
+
+
+
+
+
+############################################################################################
+#
+#		OPSPECS TAB CODE
+#
+############################################################################################
+
+
+#load new opsecs as a whole. 
+
+#NOTE: any time any change is made, the catalog version must update. 
+#add single new opspec
+#delete single existing opspec
+#update standards version of single opspec
+
+
+#does the name of the opspec need to be included? 
+
+#should this be a table or a tree?
+
+
+function loadopspecs(){
+	#CREATE WINDOW
+	$doc = doc_open('P:\Public\Assets\ArbortextCatalogs\Standards\opspecs\loadOpspecs.xml', 1)
+	$xui_loadOpspecs = window_create("xui",0x040000, $doc);
+	window_show($xui_loadOpspecs, 1);
+}
+
+#build the initial opspec tab table. This will not be done often. 
+function buildOpspecsTab() {
+	#find the browse path to know what file to open. 
+	#local $browseToPath = dlgitem_get_value($xui_loadisarps,"targetValue");
+	$editionnumberOps = dlgitem_get_value($xui_loadOpspecs,"editionnumberOpspecs")
+	$editiondatecaptureOps = dlgitem_get_value($xui_loadOpspecs,"editiondateOpspecs")
+	$editiondate00 = ctime($editiondatecaptureOps)
+	#delete the 0s
+	$datenoZero = sub('00:00:00 ','', $editiondate00, $editiondateOps)
+	$todaysdate=getTimeDate("3")
+	# eval "\n".$editionnumberOps output=>*
+	# eval "\n".$editiondateOps output=>*
+	
+	window_destroy($xui_loadOpspecs)
+	
+	edit -nw -xml "P:\Public\Assets\ArbortextCatalogs\Standards\opspecs\opspecs.xml"
+	
+	#find all the isarps
+	$CountOpspecsNumber=oid_find_children(oid_first(), allopspecnumbers, "para")
+	$CountOpspecsTitle=oid_find_children(oid_first(), allopspectitles, "title")
+	
+	#eval "\n".$CountOpspecsNumber output=>*
+	
+	$countO=0;
+	$countY=0;
+		
+	if(count($allopspecnumbers)>0)
+	{
+		for($eachI in $allopspecnumbers)
+		{
+			$countO++
+			$opspecNumber[$countO]=oid_content($allopspecnumbers[$eachI])
+			$opspecTitle[$countO]=oid_content($allopspectitles[$eachI])
+			#eval "\nnumber: ".$opspecNumber[$countO]."\ttitle: ".$opspecTitle[$countO] output=>*
+		}
+	}
+	file_close()
+	
+	
+	edit -nw -xml "P:\Public\Assets\ArbortextCatalogs\Standards\xui_standardsManager.xml"
+	#update edition number information:
+	oid_find_child_attrs(oid_first(), editionnumberarr2, "id", "editionnumberOpspecs", 0x01)
+	for(eachnum in editionnumberarr2) {
+		goto_oid(editionnumberarr2[1], -2)
+		mark begin
+		goto_oid(editionnumberarr2[1], -3)
+		mark end
+		delete_mark
+	}
+	$neweditionnumberOpspec = "<description fontsize=\"12\" id=\"editionnumber\">Edition ".$editionnumberOps."</description>"
+	insert_string -markup "$neweditionnumberOpspec"
+	
+	#update edition date information
+	oid_find_child_attrs(oid_first(), editiondatearr2, "id", "editiondateOpspecs", 0x01)
+	for(eachdate in editiondatearr2) {
+		goto_oid(editiondatearr2[1], -2)
+		mark begin
+		goto_oid(editiondatearr2[1], -3)
+		mark end
+		delete_mark
+	}
+	$neweditiondateOpspecs = "<description id=\"editiondate\">Edition Date: ".$editiondateOps."</description>"
+	insert_string -markup "$neweditiondateOpspecs"
+	
+	oid_find_child_attrs(oid_first(), opspecTable, "id", "table_opspecs", 0x01)
+	goto_oid(opspecTable[1],-1)
+	
+	for($eachOp in $opspecNumber) {
+		$countY++;
+		$opspecRows[$countY] = "<row appdata=\'<OPSPEC id=\"x".time().$countY."\" st_ver=\"Ed ".$editiondateOps."\" conformity=\"\" opspec_nbr=\"".$opspecNumber[$eachOp]."\" opspec_desc=\"".$opspecTitle[$eachOp]."\"/>\' id=\"".$opspecNumber[$eachOp]."\"><cell id=\"opspec\">".$opspecNumber[$eachOp]."</cell></row>"
+		insert_string -markup "$opspecRows[$countY]" 
+	}
+	
+	#delete buffer
+	db -all
+	#save the .xml file
+	doc_save()
+	
+	#wait/stall .25 seconds before closing. This allows toolbar3 to autoclose. otherwise, receive error.  
+	timer_add_callback(25, "timerCallback");
+	window_set(0, "message", "waiting..."); 
+	$result = event_process(1);
+	window_set(0, "message", "event_process returned $result");
+	file_close()	
+	
+	
+}
+
+
+#insert the opspecs tag. 
+function insertOpspecsTag()
+{
+	
+	
+	$getOpspecRow = dlgitem_get_table_selection($xui_standardsManager,"table_opspecs")
+	$opspecSelected = dlgitem_get_appdata_at($xui_standardsManager, "table_opspecs", $getOpspecRow)
+	
+	eval "\nRow: ".$getOpspecRow."\tselected: ".$opspecSelected output=>*
+	
+	#----CONFIRM INSIDE STANDARDS TAG
+	$whattag=oid_name(oid_caret())
+	$parentTag=oid_name(oid_parent(oid_caret()))
+	if($whattag=="standards" || $parentTag=="standards") {
+		insert_string -markup "$opspecSelected";
+		# eval "lookTag: [ ".$whattag." ]" output=>*
+		# eval "lookParent: [ ".$parentTag." ]" output=>* 
+	} else {
+		message_box("Isarps must be inserted within a standards tag.",0x00+0x10,"Standards Error")
+	} 
+	
+}
+
+
+
+
+
+
+
+
+
+
+#####
+# POP UP TO REVISE OPSPEC CATALOG
+#	 start here. 
+####
+function updateOpspecs(){
+	#CREATE WINDOW
+	$doc = doc_open('P:\Public\Assets\ArbortextCatalogs\Standards\opspecs\dialogs\updateOpspecs.xml', 1)
+	$xui_updateOpspecs = window_create("xui",0x040000, $doc);
+	window_show($xui_updateOpspecs, 1);
+}
+
+
+###########################
+#	DELETE OPSPEC
+###########################
+function updateOpspecsWindow(){
+	#CREATE WINDOW
+	$doc = doc_open('P:\Public\Assets\ArbortextCatalogs\Standards\opspecs\dialogs\deleteOpspecs.xml', 1)
+	$xui_deleteOpspecs = window_create("xui",0x040000, $doc);
+	window_show($xui_deleteOpspecs, 1);
+}
+
+function populateOpspecsDeletewindow(){
+	
+	eval "i made it to delete" output=>*
+	
+	edit -nw -xml "P:\Public\Assets\ArbortextCatalogs\Standards\opspecs\dialogs\deleteOpspecs.xml"
+	
+	oid_find_children(oid_first(), opspecCombobox, "combobox", 0x01)
+	goto_oid(opspecCombobox[1], -2)
+	mark begin
+	goto_oid(opspecCombobox[1], -3)
+	mark end
+	delete_mark 
+	
+	$newcombobox="<combobox id=\"combobox\" type=\"dropdownlist\"></combobox>"
+	insert_string -markup "$newcombobox"
+	oid_find_children(oid_first(), opspecCombobox2, "combobox", 0x01)
+	goto_oid(opspecCombobox2[1], -1)
+	
+	for($eachOpspec in $opspecDropList)
+	{
+		$dropdownOpspec = "<listitem id=\"".$opspecDropList[$eachOpspec]."\" label=\"".$opspecDropList[$eachOpspec]."\"/>"
+		insert_string -markup "$dropdownOpspec"
+	}
+
+	db -all
+	doc_save()
+	file_close()
+	
+	updateOpspecsWindow()
+}
+
+function deleteOpspecFromCatalog() {
+	
+	eval "i made it" output=>*
+	
+	#get the selected item. 
+	$opspecSelected=dlgitem_get_value($xui_deleteOpspecs , "revisionradio") 
+	
+	#open the xui_standardsManager
+	
+	
+	#delete from standards manager. 
+	
+	
+	#confirm delete.  
+	
+}
+
+
+
+
+
+#when ok button is hit on Revise OpSpecs Catalog:
+function updateOpspecsSelect() {
+	
+	$countOp=0;
+	
+	#capture the selection:
+	#(1) Revise existing
+	#(2) Delete existing
+	#(3) Add new opspec
+	$revisionSelected=dlgitem_get_value($xui_updateOpspecs , "revisionradio") 
+	#eval $revisionSelected output=>*
+	#destroy the pop update
+	window_destroy($xui_updateOpspecs)
+	
+	#find current OpSpec information
+	#open the Standards Manager
+	edit -nw -readonly -xml "P:\Public\Assets\ArbortextCatalogs\Standards\xui_standardsManager.xml"
+	
+	#find the table control with id=table_opspecs
+	$numOpspecs=oid_find_child_attrs(oid_first(), opspecTable, "id", "opspec")
+	#eval "\n".$numOpspecs output=>*
+	
+	#in the table_opspecs, find the cells and get oid content.
+	for ($eachOp in $opspecTable) {
+		$countOp++
+		$opspecDropList[$countOp]=oid_content($opspecTable[$eachOp])
+		#eval "\n".$opspecDropList[$countOp] output=>*
+	}
+	
+	
+	file_close()
+	
+	#return $opspecDropList
+	
+	#use info to fill dropdown. 
+	# $newcombobox="<combobox id=\"combobox\" type=\"dropdownlist\"></combobox>"
+		# $dropdownManual = "<listitem id=\"".$panelBookLABELS[$eachManual]."\" label=\"".$panelBookNames[$eachManual]."\"/>"
+		# insert_string -markup "$dropdownManual"
+	
+	if($revisionSelected==1){
+		#open revise opspec window
+	}
+	if($revisionSelected==2){
+		#open delete opspec window
+		populateOpspecsDeletewindow()
+	}
+	if($revisionSelected==3){
+		#open add new opspec window
+	}
+	
+	
+	
+}
+
+
+
+###########################
+#	ADD NEW OPSPEC
+###########################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###########################
+#	UPDATE EXISTING OPSPEC
+###########################
+
+
+
+
+
+
+
+
+
+
+
+
+
